@@ -8,6 +8,22 @@ from dataclasses import dataclass, asdict
 import json
 import sqlite3
 
+# Import database adapters
+try:
+    import psycopg2
+except ImportError:
+    psycopg2 = None
+
+try:
+    import pymysql
+except ImportError:
+    pymysql = None
+
+try:
+    import pyodbc as pyodbc_connect
+except ImportError:
+    pyodbc_connect = None
+
 # Try relative import first, fall back to direct import
 try:
     from .connection_manager import DatabaseConfig, ConnectionManager
@@ -69,6 +85,9 @@ class SchemaScanner:
 
     def _scan_postgresql(self) -> Tuple[Dict[str, TableInfo], Optional[str]]:
         """Scan PostgreSQL schema"""
+        if not psycopg2:
+            return {}, "psycopg2 not installed. Install with: pip install psycopg2-binary"
+        
         try:
             conn = psycopg2.connect(
                 host=self.config.host,
@@ -142,6 +161,9 @@ class SchemaScanner:
 
     def _scan_mysql(self) -> Tuple[Dict[str, TableInfo], Optional[str]]:
         """Scan MySQL schema"""
+        if not pymysql:
+            return {}, "pymysql not installed. Install with: pip install pymysql"
+        
         try:
             conn = pymysql.connect(
                 host=self.config.host,
@@ -210,6 +232,9 @@ class SchemaScanner:
 
     def _scan_sqlserver(self) -> Tuple[Dict[str, TableInfo], Optional[str]]:
         """Scan SQL Server schema"""
+        if not pyodbc_connect:
+            return {}, "pyodbc not installed. Install with: pip install pyodbc"
+        
         try:
             conn_str = (
                 f"Driver={{ODBC Driver 17 for SQL Server}};"

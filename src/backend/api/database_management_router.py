@@ -122,7 +122,7 @@ async def test_database_connection(request_body: DatabaseTestRequest, request: R
     try:
         db_service = request.app.state.database_management_service
         
-        success, message = db_service.test_database_connection(request_body)
+        success, message = db_service.test_database_connection(request_body.dict())
         
         return DatabaseTestResponse(success=success, message=message)
     except Exception as e:
@@ -276,7 +276,7 @@ async def validate_credentials_security(request_body: DatabaseTestRequest, reque
     try:
         db_service = request.app.state.database_management_service
         
-        result = db_service.test_database_connection(request_body)
+        result = db_service.test_database_connection(request_body.dict())
         
         if not result["success"]:
             return CredentialSecurityCheckResponse(
@@ -289,7 +289,7 @@ async def validate_credentials_security(request_body: DatabaseTestRequest, reque
             )
         
         # Get permission details
-        perm_result = db_service.validate_permissions(request_body)
+        perm_result = db_service.validate_permissions(request_body.dict())
         
         return CredentialSecurityCheckResponse(
             success=True,
