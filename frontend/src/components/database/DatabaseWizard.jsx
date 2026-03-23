@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Database, AlertCircle, Check, Loader } from 'lucide-react'
+import { API } from '../../config/endpoints'
 
 /**
  * DatabaseWizard Component
@@ -9,7 +10,6 @@ import { Database, AlertCircle, Check, Loader } from 'lucide-react'
  * Steps: 1. Input → 2. Save (Key Vault)
  */
 
-const API_BASE = 'http://localhost:8889'
 const TEST_USER = 'test_user@forensic.guardian'
 
 export default function DatabaseWizard({ onSuccess = () => {}, onCancel = () => {} }) {
@@ -62,7 +62,7 @@ export default function DatabaseWizard({ onSuccess = () => {}, onCancel = () => 
     setStep(2)
 
     try {
-      const response = await fetch(`${API_BASE}/api/databases/add?user_id=${TEST_USER}`, {
+      const response = await fetch(API.DATABASE_ADD(TEST_USER), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
+import { API } from '../config/endpoints'
 
-const API_BASE = 'http://localhost:8889'
 const TEST_USER = 'test_user@forensic.guardian'
 
 export const useAppStore = create((set, get) => ({
@@ -43,7 +43,7 @@ export const useAppStore = create((set, get) => ({
   fetchUserDatabases: async () => {
     set({ loadingDatabases: true, databaseError: null })
     try {
-      const response = await fetch(`${API_BASE}/api/databases/list?user_id=${TEST_USER}`)
+      const response = await fetch(API.DATABASE_LIST(TEST_USER))
       if (!response.ok) throw new Error('Failed to fetch databases')
       const data = await response.json()
       set({ userDatabases: data.databases || [] })
@@ -60,7 +60,7 @@ export const useAppStore = create((set, get) => ({
   addDatabase: async (config) => {
     set({ loadingDatabases: true, databaseError: null })
     try {
-      const response = await fetch(`${API_BASE}/api/databases/add?user_id=${TEST_USER}`, {
+      const response = await fetch(API.DATABASE_ADD(TEST_USER), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config)
@@ -81,7 +81,7 @@ export const useAppStore = create((set, get) => ({
   selectDatabase: async (dbName) => {
     set({ loadingDatabases: true, databaseError: null })
     try {
-      const response = await fetch(`${API_BASE}/api/databases/select/${dbName}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/databases/select/${dbName}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: TEST_USER })
@@ -112,7 +112,7 @@ export const useAppStore = create((set, get) => ({
         question: text,
         ...(sessionId && { session_id: sessionId })
       }
-      const res = await fetch(`${API_BASE}/api/query`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/query`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

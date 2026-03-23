@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAppStore } from '../store/useAppStore';
+import { API } from '../config/endpoints';
 
 export const useSchemaScanner = () => {
   const { selectedDatabase, sessionId } = useAppStore();
@@ -27,7 +28,7 @@ export const useSchemaScanner = () => {
         : selectedDatabase.db_name;
 
       const response = await fetch(
-        `http://localhost:8889/api/schema/scan?db_name=${dbName}&session_id=${sessionId}`,
+        API.SCHEMA_SCAN(dbName, sessionId),
         {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' }

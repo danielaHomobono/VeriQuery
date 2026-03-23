@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { AlertCircle, ChevronDown } from 'lucide-react'
+import { API } from '../../config/endpoints'
 
 export default function AmbiguityResolver({ question, onSelect, isLoading }) {
   const [ambiguity, setAmbiguity] = useState(null)
@@ -14,7 +15,7 @@ export default function AmbiguityResolver({ question, onSelect, isLoading }) {
         setError('')
         setSelectedOption(null)
         
-        const response = await fetch('http://localhost:8888/api/query/analyze-ambiguity', {
+        const response = await fetch(API.ANALYZE_AMBIGUITY, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ question }),
@@ -44,7 +45,7 @@ export default function AmbiguityResolver({ question, onSelect, isLoading }) {
     setSelectedOption(metric)
     
     try {
-      const response = await fetch('http://localhost:8888/api/query/select-clarification', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/query/select-clarification`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -10,12 +10,12 @@
 
 ## ⚡ Iniciar Mañana (5 segundos)
 
-### Terminal 1 - Backend
+### Terminal 1 - Backend (IMPORTANTE: Usar START_BACKEND_0000.bat)
 ```powershell
 cd C:\Users\Daniela\Desktop\forensicGuardian
-.venv\Scripts\Activate.ps1
-python -m uvicorn src.backend.api.main:app --host 127.0.0.1 --port 8000 --reload
+START_BACKEND_0000.bat
 ```
+✅ Escucha en `0.0.0.0:8000` (TODAS las interfaces)
 ✅ Esperar: `🚀 VeriQuery API ready - All services initialized`
 
 ### Terminal 2 - Frontend

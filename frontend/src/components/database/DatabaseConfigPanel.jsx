@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Plus, Database, Shield, Trash2, Eye, EyeOff } from 'lucide-react'
 import { motion } from 'framer-motion'
 import DatabaseModal from '../database/DatabaseModal'
+import { API } from '../../config/endpoints'
 
 /**
  * DatabaseConfigPanel Component
@@ -32,7 +33,7 @@ export default function DatabaseConfigPanel() {
   const handleVerifyDatabase = async (dbName) => {
     try {
       const response = await fetch(
-        `http://localhost:8888/api/databases/credentials/${dbName}/verify`,
+        `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/databases/credentials/${dbName}/verify`,
         { method: 'POST' }
       )
       const data = await response.json()
@@ -55,7 +56,7 @@ export default function DatabaseConfigPanel() {
 
     try {
       const response = await fetch(
-        `http://localhost:8888/api/databases/credentials/${dbName}`,
+        `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/databases/credentials/${dbName}`,
         { method: 'DELETE' }
       )
       
