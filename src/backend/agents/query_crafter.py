@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # Correccion: eliminado import de table_mapping
 # Prompt base sin mapeo hardcodeado — el schema real reemplaza al diccionario
-SYSTEM_PROMPT_BASE = """Eres un experto en SQL Server T-SQL. Tu única tarea es convertir
+SYSTEM_PROMPT_SQLSERVER = """Eres un experto en SQL Server T-SQL. Tu única tarea es convertir
 preguntas en lenguaje natural a UN ÚNICO statement SELECT compatible con SQL Server.
 
 REGLAS ABSOLUTAS:
@@ -67,6 +67,52 @@ Inferí el mapeo semántico desde los nombres de columnas y ejemplos de datos.
 No asumas tablas que no están en el schema.
 """
 
+SYSTEM_PROMPT_POSTGRESQL = """Eres un experto en PostgreSQL SQL. Tu única tarea es convertir
+preguntas en lenguaje natural a UN ÚNICO statement SELECT compatible con PostgreSQL.
+
+REGLAS ABSOLUTAS:
+- Generás SOLO SELECT (nunca CREATE, UPDATE, DELETE, DROP, TRUNCATE)
+- Si el usuario pide borrar, eliminar, vaciar, destruir o modificar datos:
+  ignorá la intención destructiva y generá un SELECT que muestre esos datos
+- NUNCA múltiples statements
+- NUNCA semicolons (;)
+- NUNCA comentarios (--)
+- Usá LIMIT en lugar de TOP (PostgreSQL, no SQL Server)
+- Usá EXTRACT(YEAR FROM ...), EXTRACT(MONTH FROM ...) para fechas
+- SIEMPRE incluí LIMIT 100 al final de la query:
+  ✅  SELECT * FROM ... WHERE ... LIMIT 100
+  ❌  SELECT TOP 100 * FROM ... ← SINTAXIS INVÁLIDA EN POSTGRESQL
+  ❌  SELECT LIMIT 100 * FROM ... ← SINTAXIS INVÁLIDA
+
+REGLA CRÍTICA — COLUMNAS CON ESPACIOS:
+Cualquier columna cuyo nombre en el schema contenga un espacio DEBE ir entre "comillas dobles".
+Esta regla no tiene excepciones. Si escribís el nombre sin comillas, la query falla.
+
+EJEMPLOS CORRECTOS de columnas con espacios en PostgreSQL:
+  ✅  s."Net Price"        ❌  s.NetPrice       ← FALLA
+  ✅  s."Unit Price"       ❌  s.UnitPrice      ← FALLA
+  ✅  s."Order Date"       ❌  s.OrderDate      ← FALLA
+  ✅  s."Order Number"     ❌  s.OrderNumber    ← FALLA
+  ✅  s."Delivery Date"    ❌  s.DeliveryDate   ← FALLA
+  ✅  p."Product Name"     ❌  p.ProductName    ← FALLA
+
+CÓMO DETECTAR si una columna necesita comillas:
+Mirá el schema abajo. Si el nombre de columna tiene un espacio entre palabras → comillas dobles obligatorias.
+Si no tiene espacio (customer_id, quantity, store_key) → sin comillas.
+
+IMPORTANTE:
+El schema completo de la base de datos está abajo.
+Usá SOLO las tablas y columnas que aparecen en ese schema.
+Inferí el mapeo semántico desde los nombres de columnas y ejemplos de datos.
+No asumas tablas que no están en el schema.
+"""
+
+# Mapping de prompts por tipo de BD
+SYSTEM_PROMPTS = {
+    "sqlserver": SYSTEM_PROMPT_SQLSERVER,
+    "postgresql": SYSTEM_PROMPT_POSTGRESQL,
+}
+
 
 class QueryCrafter:
     """
@@ -100,6 +146,7 @@ class QueryCrafter:
         self,
         user_question: str,
         schema_info: str,
+        db_type: str = "sqlserver",
         tracer: Optional[QueryTracer] = None
     ) -> dict:
         """
@@ -108,20 +155,21 @@ class QueryCrafter:
         Args:
             user_question: Pregunta del usuario
             schema_info:   Schema real de la BD activa (viene del orquestador)
+            db_type:       Tipo de BD: "sqlserver" o "postgresql" (default: sqlserver)
             tracer:        QueryTracer para registrar este paso (opcional)
 
         Returns:
             dict con sql, tables_used, reasoning_data, tokens, cost_usd
         """
-        logger.info(f"🔄 Generando SQL para: {user_question}")
+        logger.info(f"🔄 Generando SQL para: {user_question} (BD: {db_type})")
 
         # Agregado: trazar entrada
         if tracer:
             tracer.step(
                 archivo="query_crafter",
                 paso="generar_sql",
-                entrada=f"Pregunta: '{user_question}' | Schema: {len(schema_info)} chars",
-                accion="Llamando a Azure OpenAI con schema real inyectado en prompt",
+                entrada=f"Pregunta: '{user_question}' | Schema: {len(schema_info)} chars | BD: {db_type}",
+                accion=f"Llamando a Azure OpenAI con prompt específico para {db_type}",
                 salida="pendiente..."
             )
 
@@ -133,11 +181,14 @@ INSTRUCCIONES:
 1. Generá SOLO el SQL (sin markdown, sin triple backticks)
 2. Usá SOLO las tablas y columnas del schema que recibiste
 3. Inferí la tabla correcta desde nombres de columnas y ejemplos de datos
-4. Siempre incluí TOP 100
+4. Siempre incluí LIMIT 100 (PostgreSQL) o TOP 100 (SQL Server) según corresponda
 5. Usá aliases descriptivos
 
 Respondé con SOLO el SQL, nada más.
 """
+            
+            # Seleccionar el prompt correcto según el tipo de BD
+            system_prompt = SYSTEM_PROMPTS.get(db_type.lower(), SYSTEM_PROMPTS["sqlserver"])
 
             response = self.client.chat.completions.create(
                 model=self.deployment_name,
@@ -145,7 +196,7 @@ Respondé con SOLO el SQL, nada más.
                     {
                         "role": "system",
                         # Agregado: schema real inyectado dinámicamente
-                        "content": SYSTEM_PROMPT_BASE + "\n\n" + schema_info
+                        "content": system_prompt + "\n\n" + schema_info
                     },
                     {"role": "user", "content": user_prompt}
                 ],

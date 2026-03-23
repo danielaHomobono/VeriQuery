@@ -96,6 +96,76 @@ class NL2SQLGenerator:
         except Exception as e:
             logger.error(f"❌ No se pudo cargar BD por defecto: {e}")
 
+    def set_active_database_name(self, db_name: str) -> None:
+        """
+        Cambia el nombre de la BD activa y carga el schema desde Key Vault si es necesario.
+        
+        Args:
+            db_name: Nombre de la BD (ej: "contoso_local", "supabase_prod")
+        """
+        # Primero, verificar si el schema ya está en caché
+        if db_name in self._schema_cache:
+            self._active_db_name = db_name
+            # Detectar tipo por nombre
+            if "postgres" in db_name.lower() or "supabase" in db_name.lower():
+                self._active_db_type = "postgresql"
+            else:
+                self._active_db_type = "sqlserver"
+            logger.info(f"✅ BD activa actualizada → '{db_name}' ({self._active_db_type}) — schema desde caché")
+            return
+        
+        # Si no está en caché, intentar cargar desde Key Vault + connector dinámico
+        try:
+            from src.backend.core.secure_credential_store import SecureCredentialStore
+            from src.backend.database import ConnectionConfig, SQLServerConnector, PostgreSQLConnector
+            
+            store = SecureCredentialStore()
+            creds, error = store.get_credentials(db_name)
+            
+            if creds and not error:
+                db_type = creds.get("db_type", "sqlserver").lower()
+                
+                # Crear connector específico según tipo de BD
+                config = ConnectionConfig(
+                    host=creds.get("host"),
+                    port=int(creds.get("port", 1433 if db_type == "sqlserver" else 5432)),
+                    username=creds.get("username"),
+                    password=creds.get("password"),
+                    database=creds.get("database"),
+                    driver=creds.get("driver")
+                )
+                
+                if db_type == "postgresql":
+                    connector = PostgreSQLConnector(config)
+                else:
+                    connector = SQLServerConnector(config)
+                
+                connector.connect()
+                
+                # Cargar schema usando el connector conectado
+                schema = self._load_schema_from_connector(
+                    connector=connector,
+                    db_name=db_name,
+                    db_type=db_type
+                )
+                self._schema_cache[db_name] = schema
+                self._active_db_name = db_name
+                self._active_db_type = db_type
+                self._active_connector = connector
+                
+                logger.info(f"✅ BD activa actualizada → '{db_name}' ({db_type}) — schema cargado desde Key Vault")
+                return
+        except Exception as e:
+            logger.warning(f"⚠️ No se pudo cargar schema desde Key Vault para '{db_name}': {e}")
+        
+        # Si todo falla, usar el método simple de antes
+        self._active_db_name = db_name
+        if "postgres" in db_name.lower() or "supabase" in db_name.lower():
+            self._active_db_type = "postgresql"
+        else:
+            self._active_db_type = "sqlserver"
+        logger.info(f"✅ BD activa actualizada → '{db_name}' ({self._active_db_type}) — sin schema (usará genérico)")
+
     def set_active_database(
         self,
         db_name: str,
@@ -157,6 +227,7 @@ class NL2SQLGenerator:
     def get_active_schema(self) -> str:
         if self._active_db_name and self._active_db_name in self._schema_cache:
             return self._schema_cache[self._active_db_name]
+        
         return "⚠️ Schema no disponible — conectá una BD primero"
 
     def generate_sql(
@@ -244,6 +315,7 @@ class NL2SQLGenerator:
         crafter_result = self.query_crafter.generate_sql(
             user_question=enriched_query,
             schema_info=schema_info,
+            db_type=self._active_db_type or "sqlserver",
             tracer=tracer
         )
 
@@ -346,7 +418,7 @@ class NL2SQLGenerator:
                     f"No se pudieron obtener tablas: {tables_result.error}"
                 )
 
-            tables = [row["TABLE_NAME"] for row in tables_result.data]
+            tables = [row.get("TABLE_NAME") or row.get("table_name") for row in tables_result.data]
             logger.info(f"  → {len(tables)} tablas encontradas")
 
             for table_name in tables:
@@ -367,15 +439,18 @@ class NL2SQLGenerator:
 
                 if cols_result.success:
                     for col in cols_result.data:
-                        col_name = col["COLUMN_NAME"]
-                        col_type = col["DATA_TYPE"]
-                        col_len = col.get("CHARACTER_MAXIMUM_LENGTH")
+                        # PostgreSQL devuelve minúsculas, SQL Server mayúsculas
+                        col_name = col.get("COLUMN_NAME") or col.get("column_name")
+                        col_type = col.get("DATA_TYPE") or col.get("data_type")
+                        col_len = col.get("CHARACTER_MAXIMUM_LENGTH") or col.get("character_maximum_length")
+                        is_nullable = col.get("IS_NULLABLE") or col.get("is_nullable")
+                        
                         type_str = (
                             f"{col_type}({col_len})"
                             if col_len and col_len > 0
                             else col_type
                         )
-                        nullable = "" if col.get("IS_NULLABLE") == "YES" else " [NOT NULL]"
+                        nullable = "" if is_nullable == "YES" else " [NOT NULL]"
                         schema_text += f"  {col_name:30} {type_str}{nullable}\n"
 
                 # Ejemplos de datos (ayudan al LLM a inferir contenido)
