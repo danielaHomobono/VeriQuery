@@ -127,10 +127,13 @@ async def save_database_config(request_body: DatabaseSaveRequest, request: Reque
     Business logic delegated to DatabaseManagementService
     """
     try:
+        logger.info(f"📝 Saving database config: {request_body.dict()}")
+        
         db_service = request.app.state.database_management_service
         
         # Service now returns complete dict matching DatabaseCredentialsResponse
         result = db_service.save_database_config(request_body.dict())
+        logger.info(f"✅ Database saved successfully: {result}")
         
         return DatabaseCredentialsResponse(**result)
     except Exception as e:

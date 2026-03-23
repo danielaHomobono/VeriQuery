@@ -11,6 +11,7 @@ Responsabilidades SOLO:
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
 from contextlib import asynccontextmanager
 import logging
 import sys
@@ -221,6 +222,16 @@ async def health_check():
 # ============================================================================
 # ERROR HANDLERS
 # ============================================================================
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    """Handle Pydantic validation errors."""
+    logger.error(f"❌ Validation Error on {request.url}: {exc.errors()}", exc_info=True)
+    return {
+        "success": False,
+        "error": "Validation error",
+        "detail": f"Invalid request body: {exc.errors()}"
+    }
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request, exc):

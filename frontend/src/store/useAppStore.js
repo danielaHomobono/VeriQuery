@@ -61,16 +61,19 @@ export const useAppStore = create((set, get) => ({
     set({ loadingDatabases: true, databaseError: null })
     try {
       // Map frontend form fields to backend API schema
+      // Use null instead of undefined for proper JSON serialization
       const requestBody = {
-        name: config.db_name || config.name,  // Support both field names
-        db_type: config.db_type,
-        host: config.host || undefined,
-        port: config.port ? parseInt(config.port) : undefined,
-        database: config.database_name || config.database,  // Support both field names
-        username: config.username || undefined,
-        password: config.password || undefined,
-        filepath: config.filepath  // SQLite field
+        name: config.db_name || config.name,  // Support both field names (required)
+        db_type: config.db_type,  // required
+        host: config.host || null,
+        port: config.port ? parseInt(config.port) : null,
+        database: config.database_name || config.database || "",  // default empty string
+        username: config.username || null,
+        password: config.password || null,
+        filepath: config.filepath || null  // SQLite field
       }
+      
+      console.log('📤 Adding database:', requestBody)
       
       const response = await fetch(API.DATABASE_ADD(), {
         method: 'POST',

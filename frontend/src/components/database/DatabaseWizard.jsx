@@ -63,16 +63,19 @@ export default function DatabaseWizard({ onSuccess = () => {}, onCancel = () => 
 
     try {
       // Map frontend form fields to backend API schema
+      // Only include defined values - Pydantic will handle Optional fields
       const requestBody = {
-        name: formData.db_name,  // Map: db_name → name
-        db_type: formData.db_type,
-        host: formData.host || undefined,
-        port: formData.port ? parseInt(formData.port) : undefined,
-        database: formData.database_name,  // Map: database_name → database
-        username: formData.username || undefined,
-        password: formData.password || undefined,
-        filepath: undefined  // SQLite field
+        name: formData.db_name,  // Map: db_name → name (required)
+        db_type: formData.db_type,  // required
+        host: formData.host || null,
+        port: formData.port ? parseInt(formData.port) : null,
+        database: formData.database_name || "",  // default empty string
+        username: formData.username || null,
+        password: formData.password || null,
+        filepath: null  // SQLite field
       }
+
+      console.log('📤 Sending database config:', requestBody)
 
       const response = await fetch(API.DATABASE_ADD(), {
         method: 'POST',
