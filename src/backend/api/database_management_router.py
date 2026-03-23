@@ -48,6 +48,10 @@ class DatabaseCredentialsResponse(BaseModel):
     stored_in_keyvault: bool
     is_readonly: Optional[bool] = None
     readonly_message: Optional[str] = None
+
+
+class SelectDatabaseRequest(BaseModel):
+    user_id: str
     permission_details: Optional[Dict] = None
     warnings: Optional[List[str]] = None
 
@@ -64,7 +68,7 @@ class DatabaseConfig(BaseModel):
 
 
 class DatabaseListResponse(BaseModel):
-    databases: List[str]
+    databases: List[DatabaseConfig]  # Return full database objects, not just names
     active: Optional[str] = None
 
 
@@ -75,6 +79,12 @@ class DatabaseDetailsResponse(BaseModel):
 class DatabaseActivateResponse(BaseModel):
     success: bool
     message: str
+
+
+class SelectDatabaseResponse(BaseModel):
+    success: bool
+    message: str
+    session_id: Optional[str] = None
 
 
 class CredentialSecurityCheckResponse(BaseModel):
@@ -221,6 +231,37 @@ async def activate_database(database_name: str, request: Request):
         raise
     except Exception as e:
         logger.error(f"❌ Error activating database: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+
+@router.post("/select/{db_name}", response_model=SelectDatabaseResponse)
+async def select_database(db_name: str, request_body: SelectDatabaseRequest, request: Request):
+    """Select a database for the user's session"""
+    try:
+        db_service = request.app.state.database_management_service
+        session_service = request.app.state.session_service
+        user_id = request_body.user_id
+        
+        success = db_service.activate_database(db_name)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail=f"Database '{db_name}' not found")
+        
+        # Sync with SessionService
+        session_service.set_selected_database(user_id, db_name)
+        
+        # Get the session_id from the session data
+        session_id = session_service.get_session_id(user_id)
+        
+        return SelectDatabaseResponse(
+            success=True,
+            message=f"Database '{db_name}' selected",
+            session_id=session_id
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error selecting database: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 

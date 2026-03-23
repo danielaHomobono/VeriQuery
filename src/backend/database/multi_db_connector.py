@@ -159,10 +159,11 @@ class MultiDatabaseConnector:
             return None
 
         return {
-            "name": config.name,
+            "db_name": config.name,  # Frontend expects db_name, not name
+            "name": config.name,  # Keep both for compatibility
             "db_type": config.db_type,
-            "host": config.host,
-            "port": config.port,
+            "host": str(config.host) if config.host else None,  # Ensure string
+            "port": int(config.port) if config.port else None,  # Ensure integer
             "database": config.database,
             "username": config.username,
             "filepath": config.filepath,

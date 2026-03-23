@@ -129,6 +129,38 @@ class SessionService:
             logger.error(f"[{user_id}] Error obteniendo BD: {str(e)}", exc_info=True)
             return None
 
+    def get_session_id(self, user_id: str) -> Optional[str]:
+        """
+        Obtiene el session_id para un usuario.
+
+        Args:
+            user_id: ID del usuario
+
+        Returns:
+            Session ID o None
+        """
+        try:
+            if user_id not in self._user_sessions:
+                logger.warning(f"[{user_id}] No hay sesión activa")
+                return None
+            
+            session = self._user_sessions[user_id]
+            
+            # Verificar expiración
+            if self._is_session_expired(session):
+                logger.info(f"[{user_id}] Sesión expirada, eliminando")
+                del self._user_sessions[user_id]
+                return None
+            
+            session_id = session.get("session_id")
+            logger.info(f"✓ [{{user_id}}] Session ID: {session_id}")
+            
+            return session_id
+
+        except Exception as e:
+            logger.error(f"[{user_id}] Error obteniendo session_id: {str(e)}", exc_info=True)
+            return None
+
     def get_selected_schema(self, user_id: str) -> Optional[dict]:
         """
         Obtiene el schema de la BD seleccionada.

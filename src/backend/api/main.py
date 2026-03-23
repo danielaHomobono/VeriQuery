@@ -69,6 +69,8 @@ class AppState:
 async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle."""
     
+    db_connector = None
+    
     # ── STARTUP ────────────────────────────────────────────────────────────
     try:
         logger.info("Starting VeriQuery API...")
@@ -140,15 +142,20 @@ async def lifespan(app: FastAPI):
         logger.error(f"❌ Startup failed: {e}", exc_info=True)
         raise
     
+    # Yield control - application is now running
+    logger.info("📢 Yielding control to application...")
     yield
+    logger.info("📢 Received shutdown signal")
     
     # ── SHUTDOWN ───────────────────────────────────────────────────────────
     logger.info("Shutting down VeriQuery API...")
-    try:
-        db_connector.disconnect()
-        logger.info("✅ Database disconnected")
-    except Exception as e:
-        logger.warning(f"⚠️ Error during shutdown: {e}")
+    if db_connector:
+        try:
+            db_connector.disconnect()
+            logger.info("✅ Database disconnected")
+        except Exception as e:
+            logger.warning(f"⚠️ Error during shutdown: {e}")
+    logger.info("📢 Shutdown complete")
 
 
 # ============================================================================

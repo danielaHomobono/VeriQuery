@@ -106,15 +106,22 @@ class DatabaseManagementService:
                 "warnings": []
             }
 
-    def list_databases(self) -> List[str]:
+    def list_databases(self) -> List[Dict[str, Any]]:
         """
-        Lista todas las bases de datos configuradas.
+        Lista todas las bases de datos configuradas con sus detalles.
 
         Returns:
-            List de nombres de BD
+            Lista de dicts con información completa de cada BD
         """
         try:
-            databases = self.connector.list_databases()
+            database_names = self.connector.list_databases()
+            databases = []
+            
+            for db_name in database_names:
+                db_info = self.get_database_info(db_name)
+                if db_info:
+                    databases.append(db_info)
+            
             logger.info(f"Listando {len(databases)} BDs configuradas")
             return databases
 
