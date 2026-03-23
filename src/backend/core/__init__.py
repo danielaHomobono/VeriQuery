@@ -1,24 +1,5 @@
 # Backend core module
-from .schema import (
-    get_schema_prompt,
-    get_table_by_name,
-    get_all_tables,
-    get_dimension_tables,
-    get_fact_tables,
-    validate_column_exists,
-    DB_SCHEMA_METADATA,
-    TableMetadata,
-    ColumnMetadata,
-)
+# Schema definitions moved to SchemaService
+# This module provides core utilities for the backend
 
-__all__ = [
-    "get_schema_prompt",
-    "get_table_by_name",
-    "get_all_tables",
-    "get_dimension_tables",
-    "get_fact_tables",
-    "validate_column_exists",
-    "DB_SCHEMA_METADATA",
-    "TableMetadata",
-    "ColumnMetadata",
-]
+__all__ = []

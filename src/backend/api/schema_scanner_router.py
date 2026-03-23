@@ -1,27 +1,15 @@
 """
 Schema Scanner API Router
 Endpoints for scanning and retrieving database schemas
+Delegates business logic to SchemaService
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Dict, Optional
-import sys
-from pathlib import Path
-import json
+import logging
 
-# Add src to path for imports
-src_path = str(Path(__file__).parent.parent)
-tools_path = str(Path(__file__).parent.parent.parent.parent / "tools")
-if src_path not in sys.path:
-    sys.path.insert(0, src_path)
-if tools_path not in sys.path:
-    sys.path.insert(0, tools_path)
-
-from database.multi_db_connector import MultiDatabaseConnector
-
-# Initialize connector
-db_connector = MultiDatabaseConnector()
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/schema", tags=["schema"])
 
@@ -39,7 +27,7 @@ class SchemaResponse(BaseModel):
 
 class SchemaExportRequest(BaseModel):
     database_name: Optional[str] = None
-    format: str = "json"  # "json" or "sql"
+    format: str = "json"  # "json", "sql", or "csv"
 
 
 class SchemaExportResponse(BaseModel):
@@ -52,71 +40,89 @@ class SchemaExportResponse(BaseModel):
 # Endpoints
 
 @router.post("/scan", response_model=SchemaResponse)
-async def scan_schema(request: SchemaScanRequest):
-    """Scan database schema"""
-    schema, error = db_connector.scan_schema(request.database_name)
-    
-    if error:
-        raise HTTPException(status_code=400, detail=error)
-    
-    return SchemaResponse(
-        schema_data=schema,
-        database_name=request.database_name,
-        error=None,
-    )
-
-
-@router.get("", response_model=SchemaResponse)
-async def get_cached_schema():
-    """Get currently cached schema (from active database)"""
-    if not db_connector.active_database:
-        raise HTTPException(status_code=400, detail="No active database set")
-    
-    schema, error = db_connector.scan_schema()
-    
-    if error:
-        raise HTTPException(status_code=400, detail=error)
-    
-    return SchemaResponse(
-        schema_data=schema,
-        database_name=db_connector.active_database.name,
-        error=None,
-    )
-
-
-@router.post("/export", response_model=SchemaExportResponse)
-async def export_schema(request: SchemaExportRequest):
-    """Export database schema in specified format"""
-    from schema_scanner import SchemaScanner
-    
-    # Get database config
-    if request.database_name:
-        config = db_connector.config_manager.get_database(request.database_name)
-        if not config:
-            raise HTTPException(status_code=404, detail=f"Database '{request.database_name}' not found")
-    else:
-        if not db_connector.active_database:
-            raise HTTPException(status_code=400, detail="No active database set")
-        config = db_connector.active_database
-    
-    # Create scanner
-    scanner = SchemaScanner(config)
-    
+async def scan_schema(request_body: SchemaScanRequest, request: Request):
+    """
+    Scan database schema
+    Business logic delegated to SchemaService
+    """
     try:
-        if request.format.lower() == "json":
-            content = scanner.export_json()
-            format_type = "json"
-        elif request.format.lower() == "sql":
-            content = scanner.export_sql_schema()
-            format_type = "sql"
-        else:
-            raise HTTPException(status_code=400, detail=f"Unsupported format: {request.format}")
+        schema_service = request.app.state.schema_service
         
-        return SchemaExportResponse(
-            content=content,
-            format=format_type,
-            database_name=config.name,
+        schema_data = schema_service.scan_schema(request_body.database_name)
+        
+        if not schema_data:
+            raise HTTPException(status_code=400, detail="Failed to scan schema")
+        
+        return SchemaResponse(
+            schema_data=schema_data,
+            database_name=request_body.database_name,
             error=None,
         )
     except Exception as e:
+        logger.error(f"❌ Error scanning schema: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Schema scan error: {str(e)}")
+
+
+@router.get("", response_model=SchemaResponse)
+async def get_cached_schema(request: Request):
+    """
+    Get currently cached schema from active database
+    """
+    try:
+        schema_service = request.app.state.schema_service
+        session_service = request.app.state.session_service
+        
+        # Get active database from session
+        active_db = session_service.get_selected_database()
+        if not active_db:
+            raise HTTPException(status_code=400, detail="No active database set")
+        
+        schema_data = schema_service.get_cached_schema(active_db)
+        
+        if not schema_data:
+            raise HTTPException(status_code=400, detail="No cached schema available")
+        
+        return SchemaResponse(
+            schema_data=schema_data,
+            database_name=active_db,
+            error=None,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error getting cached schema: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+
+@router.post("/export", response_model=SchemaExportResponse)
+async def export_schema(request_body: SchemaExportRequest, request: Request):
+    """
+    Export database schema in specified format (json, sql, csv)
+    Business logic delegated to SchemaService
+    """
+    try:
+        schema_service = request.app.state.schema_service
+        
+        # Validate format
+        if request_body.format.lower() not in ["json", "sql", "csv"]:
+            raise HTTPException(status_code=400, detail=f"Unsupported format: {request_body.format}")
+        
+        content = schema_service.export_schema(
+            database_name=request_body.database_name,
+            format=request_body.format.lower()
+        )
+        
+        if not content:
+            raise HTTPException(status_code=400, detail="Failed to export schema")
+        
+        return SchemaExportResponse(
+            content=content,
+            format=request_body.format.lower(),
+            database_name=request_body.database_name,
+            error=None,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error exporting schema: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Export error: {str(e)}")

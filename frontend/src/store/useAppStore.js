@@ -1,5 +1,8 @@
 import { create } from 'zustand'
 
+const API_BASE = 'http://localhost:8889'
+const TEST_USER = 'test_user@forensic.guardian'
+
 export const useAppStore = create((set, get) => ({
   // UI state
   sidebarOpen: true,
@@ -26,26 +29,103 @@ export const useAppStore = create((set, get) => ({
     auditEvents: [{ id: Date.now(), timestamp: new Date().toISOString(), ...event }, ...s.auditEvents]
   })),
 
-  // Send query (orquestador — llama al backend)
+  // Database Management (Guardian DB)
+  sessionId: null,
+  selectedDatabase: null,
+  userDatabases: [],
+  loadingDatabases: false,
+  databaseError: null,
+  
+  setSessionId: (id) => set({ sessionId: id }),
+  setSelectedDatabase: (db) => set({ selectedDatabase: db }),
+  
+  // Fetch databases for current user
+  fetchUserDatabases: async () => {
+    set({ loadingDatabases: true, databaseError: null })
+    try {
+      const response = await fetch(`${API_BASE}/api/databases/list?user_id=${TEST_USER}`)
+      if (!response.ok) throw new Error('Failed to fetch databases')
+      const data = await response.json()
+      set({ userDatabases: data.databases || [] })
+      return data.databases || []
+    } catch (err) {
+      set({ databaseError: err.message })
+      return []
+    } finally {
+      set({ loadingDatabases: false })
+    }
+  },
+
+  // Add new database configuration
+  addDatabase: async (config) => {
+    set({ loadingDatabases: true, databaseError: null })
+    try {
+      const response = await fetch(`${API_BASE}/api/databases/add?user_id=${TEST_USER}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      })
+      if (!response.ok) throw new Error('Failed to add database')
+      const data = await response.json()
+      set(s => ({ userDatabases: [...s.userDatabases, data] }))
+      return data
+    } catch (err) {
+      set({ databaseError: err.message })
+      throw err
+    } finally {
+      set({ loadingDatabases: false })
+    }
+  },
+
+  // Select database and create session
+  selectDatabase: async (dbName) => {
+    set({ loadingDatabases: true, databaseError: null })
+    try {
+      const response = await fetch(`${API_BASE}/api/databases/select/${dbName}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: TEST_USER })
+      })
+      if (!response.ok) throw new Error('Failed to select database')
+      const data = await response.json()
+      set({ 
+        sessionId: data.session_id,
+        selectedDatabase: dbName 
+      })
+      return data
+    } catch (err) {
+      set({ databaseError: err.message })
+      throw err
+    } finally {
+      set({ loadingDatabases: false })
+    }
+  },
+
+  // Send query (with persistent session)
   sendQuery: async (text) => {
-    const { addMessage, setLoading, setQueryResult, addAuditEvent } = get()
+    const { addMessage, setLoading, setQueryResult, addAuditEvent, sessionId } = get()
     addMessage({ role: 'user', text })
     setLoading(true)
     addAuditEvent({ type: 'query', text, status: 'processing' })
     try {
-      const res = await fetch('/api/query', {
+      const payload = { 
+        question: text,
+        ...(sessionId && { session_id: sessionId })
+      }
+      const res = await fetch(`${API_BASE}/api/query`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: text }),
+        body: JSON.stringify(payload),
       })
       const data = await res.json()
       // Map 'answer' to 'text' for consistency in UI
       addMessage({ role: 'assistant', text: data.answer, ...data })
       if (data.data) setQueryResult(data.data)
       addAuditEvent({ type: 'query', text, status: 'success', confidence: data.confidence })
-    } catch {
-      addMessage({ role: 'assistant', text: 'Error al procesar la consulta.', confidence: 0, error: true })
-      addAuditEvent({ type: 'error', text, status: 'failed' })
+    } catch (err) {
+      const errorMsg = err.message || 'Error al procesar la consulta.'
+      addMessage({ role: 'assistant', text: errorMsg, confidence: 0, error: true })
+      addAuditEvent({ type: 'error', text, status: 'failed', error: err.message })
     } finally {
       setLoading(false)
     }

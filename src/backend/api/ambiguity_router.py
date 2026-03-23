@@ -1,29 +1,15 @@
 """
 Ambiguity Detection API Router
 Endpoints for analyzing query ambiguity and suggesting clarifications
+Delegates business logic to AmbiguityService
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
-from typing import List, Optional, Dict
-import sys
-from pathlib import Path
+from typing import List, Optional
+import logging
 
-# Add paths for imports - go up to src/backend then to agents
-src_path = str(Path(__file__).parent.parent)
-if src_path not in sys.path:
-    sys.path.insert(0, src_path)
-
-# Import using relative path notation
-try:
-    from agents import get_ambiguity_detector, MetricType
-except ImportError:
-    # Fallback: try direct import with path manipulation
-    agents_path = str(Path(__file__).parent.parent / "agents")
-    sys.path.insert(0, agents_path)
-    from ambiguity_detector import AmbiguityDetector, MetricType
-    def get_ambiguity_detector():
-        return AmbiguityDetector()
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/query", tags=["query-analysis"])
 
@@ -31,6 +17,7 @@ router = APIRouter(prefix="/api/query", tags=["query-analysis"])
 # Request/Response Models
 class AnalyzeAmbiguityRequest(BaseModel):
     question: str
+    session_id: Optional[str] = None
 
 
 class Clarification(BaseModel):
@@ -51,6 +38,7 @@ class AnalyzeAmbiguityResponse(BaseModel):
 class SelectClarificationRequest(BaseModel):
     question: str
     chosen_metric: str
+    session_id: Optional[str] = None
 
 
 class SelectClarificationResponse(BaseModel):
@@ -64,91 +52,61 @@ class SelectClarificationResponse(BaseModel):
 # Endpoints
 
 @router.post("/analyze-ambiguity", response_model=AnalyzeAmbiguityResponse)
-async def analyze_ambiguity(request: AnalyzeAmbiguityRequest):
+async def analyze_ambiguity(request_body: AnalyzeAmbiguityRequest, request: Request):
     """
     Analyze a question for ambiguity and suggest clarifications
-    
-    Example:
-        POST /api/query/analyze-ambiguity
-        {"question": "¿Cuál fue el mejor año?"}
-    
-    Response:
-        {
-            "is_ambiguous": true,
-            "keywords_found": ["mejor"],
-            "clarifications": [
-                {
-                    "label": "📊 Más beneficiarios atendidos",
-                    "metric": "count_beneficiarios",
-                    "description": "Mayor número de beneficiarios alcanzados",
-                    "icon": "📊"
-                },
-                ...
-            ],
-            "confidence": 0.9
-        }
+    Business logic delegated to AmbiguityService
     """
-    detector = get_ambiguity_detector()
-    result = detector.detect(request.question)
-    
-    return AnalyzeAmbiguityResponse(
-        question=request.question,
-        is_ambiguous=result["is_ambiguous"],
-        keywords_found=result["keywords_found"],
-        clarifications=[
-            Clarification(
-                label=c["label"],
-                metric=c["metric"],
-                description=c["description"],
-                icon=c["icon"],
-            )
-            for c in result["clarifications"]
-        ],
-        confidence=result["confidence"],
-    )
+    try:
+        ambiguity_service = request.app.state.ambiguity_service
+        
+        result = ambiguity_service.detect_ambiguity(
+            question=request_body.question,
+            session_id=request_body.session_id
+        )
+        
+        return AnalyzeAmbiguityResponse(
+            question=request_body.question,
+            is_ambiguous=result["is_ambiguous"],
+            keywords_found=result["keywords_found"],
+            clarifications=[
+                Clarification(
+                    label=c["label"],
+                    metric=c["metric"],
+                    description=c["description"],
+                    icon=c["icon"],
+                )
+                for c in result["clarifications"]
+            ],
+            confidence=result["confidence"],
+        )
+    except Exception as e:
+        logger.error(f"❌ Error analyzing ambiguity: {e}", exc_info=True)
+        raise
 
 
 @router.post("/select-clarification", response_model=SelectClarificationResponse)
-async def select_clarification(request: SelectClarificationRequest):
+async def select_clarification(request_body: SelectClarificationRequest, request: Request):
     """
     User selects a clarification option
-    Returns confirmation and next steps
-    
-    Example:
-        POST /api/query/select-clarification
-        {
-            "question": "¿Cuál fue el mejor año?",
-            "chosen_metric": "count_beneficiarios"
-        }
-    
-    Response:
-        {
-            "question": "¿Cuál fue el mejor año?",
-            "chosen_metric": "count_beneficiarios",
-            "metric_label": "📊 Más beneficiarios atendidos",
-            "message": "Entendido. Voy a analizar el año con más beneficiarios atendidos.",
-            "next_step": "generating_queries"
-        }
+    Business logic delegated to AmbiguityService
     """
-    # Map metric value to label
-    metric_labels = {
-        "count_beneficiarios": "📊 Más beneficiarios atendidos",
-        "sum_donaciones": "💰 Mayor presupuesto recibido",
-        "count_entregas": "🎁 Más entregas realizadas",
-        "costo_por_beneficiario": "📉 Menor costo por beneficiario",
-        "crecimiento_percent": "📈 Mayor crecimiento",
-        "cobertura_zonas": "🗺️ Cobertura geográfica",
-    }
-    
-    metric_label = metric_labels.get(
-        request.chosen_metric,
-        f"Métrica: {request.chosen_metric}"
-    )
-    
-    return SelectClarificationResponse(
-        question=request.question,
-        chosen_metric=request.chosen_metric,
-        metric_label=metric_label,
-        message=f"Entendido. Voy a analizar: {metric_label}",
-        next_step="generating_queries",
-    )
+    try:
+        ambiguity_service = request.app.state.ambiguity_service
+        
+        result = ambiguity_service.select_clarification(
+            question=request_body.question,
+            chosen_metric=request_body.chosen_metric,
+            session_id=request_body.session_id
+        )
+        
+        return SelectClarificationResponse(
+            question=request_body.question,
+            chosen_metric=request_body.chosen_metric,
+            metric_label=result["metric_label"],
+            message=result["message"],
+            next_step="generating_queries",
+        )
+    except Exception as e:
+        logger.error(f"❌ Error selecting clarification: {e}", exc_info=True)
+        raise

@@ -30,6 +30,18 @@ class MultiDatabaseConnector:
         self.config_manager = BDConfigManager(config_dir)
         self.active_database: Optional[DatabaseConfig] = None
 
+    def create_connection(self, config: DatabaseConfig):
+        """
+        Create a database connection
+
+        Args:
+            config: DatabaseConfig for connection
+
+        Returns:
+            Database connection object or None
+        """
+        return ConnectionManager.create_connection(config)
+
     def test_connection(self, config: DatabaseConfig) -> Tuple[bool, str]:
         """
         Test a database connection

@@ -13,29 +13,46 @@ const NAV_ITEMS = [
 
 function Sidebar() {
   const [activeIndex, setActiveIndex] = useState(0)
+  const { selectedDatabase } = useAppStore()
+  
   return (
-    <aside className="w-[4.5rem] hover:w-60 transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] border-r border-border glass-surface flex flex-col items-center py-5 group shrink-0 overflow-hidden z-10">
-      <div className="w-11 h-11 rounded-lg bg-primary/10 flex items-center justify-center mb-7">
-        <Shield className="w-6 h-6 text-primary" strokeWidth={1.5} />
+    <aside className="w-[4.5rem] hover:w-60 transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] border-r border-border glass-surface flex flex-col py-5 group shrink-0 overflow-hidden z-10">
+      {/* Logo */}
+      <div className="px-2 mb-6">
+        <div className="w-11 h-11 rounded-lg bg-primary/10 flex items-center justify-center">
+          <Shield className="w-6 h-6 text-primary" strokeWidth={1.5} />
+        </div>
       </div>
-      <nav className="flex flex-col gap-1.5 w-full px-2">
+
+      {/* Main Navigation */}
+      <nav className="flex flex-col gap-1.5 px-2 flex-1 min-w-0">
         {NAV_ITEMS.map(({ icon: Icon, label }, i) => (
           <button
             key={label}
             onClick={() => setActiveIndex(i)}
-            className={`flex items-center gap-3 px-3 py-3 rounded-md transition-all duration-200 text-left w-full ${
+            className={`flex items-center gap-3 px-3 py-3 rounded-md transition-all duration-200 text-left whitespace-nowrap flex-shrink-0 ${
               i === activeIndex
                 ? 'bg-[hsl(var(--sidebar-accent))] text-[hsl(var(--sidebar-accent-foreground))]'
                 : 'text-[hsl(var(--sidebar-foreground))] hover:bg-muted hover:translate-x-0.5'
             }`}
           >
-            <Icon className="w-5 h-5 shrink-0" strokeWidth={1.5} />
-            <span className="text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            <Icon className="w-5 h-5 flex-shrink-0" strokeWidth={1.5} />
+            <span className="text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200">
               {label}
             </span>
           </button>
         ))}
       </nav>
+
+      {/* Selected Database Info */}
+      {selectedDatabase && (
+        <div className="px-2 py-4 border-t border-border mt-auto">
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            <p className="text-xs text-muted-foreground mb-2">Active Database</p>
+            <p className="text-xs font-semibold text-foreground truncate">{selectedDatabase}</p>
+          </div>
+        </div>
+      )}
     </aside>
   )
 }

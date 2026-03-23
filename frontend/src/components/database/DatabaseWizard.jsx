@@ -1,36 +1,36 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Database, AlertCircle, Check, Loader } from 'lucide-react'
-import PermissionValidator from './PermissionValidator'
 
 /**
  * DatabaseWizard Component
- * Manages database connection configuration workflow
- * Steps: 1. Input → 2. Validate → 3. Permissions → 4. Save to Key Vault
+ * Simplified database connection wizard
+ * Sends credentials to backend which stores them in Azure Key Vault
+ * Steps: 1. Input → 2. Save (Key Vault)
  */
 
+const API_BASE = 'http://localhost:8889'
+const TEST_USER = 'test_user@forensic.guardian'
+
 export default function DatabaseWizard({ onSuccess = () => {}, onCancel = () => {} }) {
-  const [step, setStep] = useState(1) // 1: Input, 2: Validation, 3: Permissions, 4: Success
+  const [step, setStep] = useState(1) // 1: Input, 2: Loading, 3: Success
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [permissions, setPermissions] = useState(null)
-  const [savedConfig, setSavedConfig] = useState(null)
 
   const [formData, setFormData] = useState({
-    name: '',
+    db_name: '',
     db_type: 'sqlserver',
+    display_name: '',
     host: '',
     port: '',
-    database: '',
+    database_name: '',
     username: '',
     password: ''
   })
 
   const dbTypeDefaults = {
-    sqlserver: { port: 1433 },
-    postgresql: { port: 5432 },
-    mysql: { port: 3306 },
-    sqlite: { port: null }
+    sqlserver: { port: 1433, label: 'Azure SQL' },
+    postgresql: { port: 5432, label: 'Supabase / PostgreSQL' }
   }
 
   const handleDbTypeChange = (type) => {
@@ -49,68 +49,39 @@ export default function DatabaseWizard({ onSuccess = () => {}, onCancel = () => 
     }))
   }
 
-  const handleValidateAndCheck = async () => {
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      // Step 1: Validate connection
-      const testResponse = await fetch('http://localhost:8888/api/databases/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      })
-
-      if (!testResponse.ok) {
-        throw new Error('Connection test failed. Check your credentials.')
-      }
-
-      // Step 2: Check permissions
-      const permResponse = await fetch('http://localhost:8888/api/databases/credentials/validate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      })
-
-      if (!permResponse.ok) {
-        throw new Error('Permission validation failed')
-      }
-
-      const permData = await permResponse.json()
-      setPermissions(permData)
-      setStep(3)
-
-    } catch (err) {
-      setError(err.message || 'An error occurred')
-      setStep(1)
-    } finally {
-      setIsLoading(false)
+  const handleSaveDatabase = async () => {
+    // Validate required fields
+    if (!formData.db_name || !formData.display_name || !formData.host || !formData.port || 
+        !formData.database_name || !formData.username || !formData.password) {
+      setError('All fields are required')
+      return
     }
-  }
 
-  const handleSaveToKeyVault = async () => {
     setIsLoading(true)
     setError(null)
+    setStep(2)
 
     try {
-      const response = await fetch('http://localhost:8888/api/databases/save', {
+      const response = await fetch(`${API_BASE}/api/databases/add?user_id=${TEST_USER}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
       })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || 'Failed to add database')
+      }
 
       const data = await response.json()
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || 'Failed to save configuration')
-      }
-
-      setSavedConfig(data)
-      setStep(4)
-      setTimeout(() => onSuccess(data), 2000)
+      setStep(3)
+      
+      // Notify parent after success animation
+      setTimeout(() => onSuccess(data), 1500)
 
     } catch (err) {
-      setError(err.message || 'An error occurred')
+      setError(err.message)
+      setStep(1)
     } finally {
       setIsLoading(false)
     }
@@ -119,14 +90,13 @@ export default function DatabaseWizard({ onSuccess = () => {}, onCancel = () => 
   const handleReset = () => {
     setStep(1)
     setError(null)
-    setPermissions(null)
-    setSavedConfig(null)
     setFormData({
-      name: '',
+      db_name: '',
       db_type: 'sqlserver',
+      display_name: '',
       host: '',
       port: 1433,
-      database: '',
+      database_name: '',
       username: '',
       password: ''
     })
@@ -137,96 +107,91 @@ export default function DatabaseWizard({ onSuccess = () => {}, onCancel = () => 
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      className="max-w-2xl mx-auto"
+      className="w-full"
     >
       {/* Header */}
       <div className="mb-6">
         <h2 className="text-2xl font-semibold text-foreground flex items-center gap-2">
           <Database className="w-6 h-6" strokeWidth={1.5} />
-          Database Configuration
+          Add Database
         </h2>
         <p className="text-sm text-foreground/60 mt-1">
-          Connect your database securely with Azure Key Vault
+          Connect your database. Credentials are stored securely in Azure Key Vault.
         </p>
       </div>
 
-      {/* Progress Steps */}
-      <div className="flex gap-2 mb-6">
-        {[
-          { num: 1, label: 'Input' },
-          { num: 2, label: 'Validate' },
-          { num: 3, label: 'Permissions' },
-          { num: 4, label: 'Complete' }
-        ].map(s => (
-          <div key={s.num} className="flex-1">
-            <div className={`flex items-center justify-center h-10 rounded font-semibold transition-all ${
-              step >= s.num
-                ? step === s.num
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-success text-success-foreground'
-                : 'bg-muted text-muted-foreground'
-            }`}>
-              {step > s.num ? (
-                <Check className="w-5 h-5" strokeWidth={2} />
-              ) : (
-                s.num
-              )}
-            </div>
-            <p className="text-xs text-center text-foreground/60 mt-1">{s.label}</p>
-          </div>
-        ))}
-      </div>
+      {/* Error */}
+      {error && (
+        <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20 flex gap-2">
+          <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" strokeWidth={2} />
+          <p className="text-sm text-destructive">{error}</p>
+        </div>
+      )}
 
-      {/* Content */}
       <AnimatePresence mode="wait">
-        {/* Step 1: Input */}
+        {/* Step 1: Input Form */}
         {step === 1 && (
           <motion.div
             key="step1"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="bento-card p-6 space-y-4"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="space-y-4"
           >
-            {/* Connection Name */}
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
-                Connection Name
-              </label>
-              <input
-                type="text"
-                name="name"
-                value={formData.name}
-                onChange={handleInputChange}
-                placeholder="e.g., production_db"
-                className="w-full px-3 py-2 rounded border border-muted bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
-              />
-            </div>
-
             {/* Database Type */}
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">
                 Database Type
               </label>
-              <div className="grid grid-cols-4 gap-2">
-                {['sqlserver', 'postgresql', 'mysql', 'sqlite'].map(type => (
+              <div className="grid grid-cols-2 gap-2">
+                {Object.entries(dbTypeDefaults).map(([type, { label }]) => (
                   <button
                     key={type}
                     onClick={() => handleDbTypeChange(type)}
-                    className={`px-3 py-2 rounded text-xs font-medium capitalize transition-colors ${
+                    className={`p-3 rounded-lg border-2 transition-all text-sm font-medium ${
                       formData.db_type === type
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted hover:bg-muted/80 text-foreground'
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border bg-muted/30 text-foreground hover:border-border/80'
                     }`}
                   >
-                    {type}
+                    {label}
                   </button>
                 ))}
               </div>
             </div>
 
+            {/* Name Fields */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">
+                  Connection Name
+                </label>
+                <input
+                  type="text"
+                  name="db_name"
+                  value={formData.db_name}
+                  onChange={handleInputChange}
+                  placeholder="my_database"
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-muted/30 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">
+                  Display Name
+                </label>
+                <input
+                  type="text"
+                  name="display_name"
+                  value={formData.display_name}
+                  onChange={handleInputChange}
+                  placeholder="My Database"
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-muted/30 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                />
+              </div>
+            </div>
+
             {/* Connection Details */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">
                   Host
@@ -237,7 +202,7 @@ export default function DatabaseWizard({ onSuccess = () => {}, onCancel = () => 
                   value={formData.host}
                   onChange={handleInputChange}
                   placeholder="server.database.windows.net"
-                  className="w-full px-3 py-2 rounded border border-muted bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-muted/30 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary text-sm"
                 />
               </div>
               <div>
@@ -249,26 +214,29 @@ export default function DatabaseWizard({ onSuccess = () => {}, onCancel = () => 
                   name="port"
                   value={formData.port}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 rounded border border-muted bg-background text-foreground focus:outline-none focus:border-primary/50"
+                  placeholder={dbTypeDefaults[formData.db_type]?.port}
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-muted/30 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary text-sm"
                 />
               </div>
             </div>
 
-            {/* Database & Username */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1">
-                  Database
-                </label>
-                <input
-                  type="text"
-                  name="database"
-                  value={formData.database}
-                  onChange={handleInputChange}
-                  placeholder="MyDatabase"
-                  className="w-full px-3 py-2 rounded border border-muted bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
-                />
-              </div>
+            {/* Database Name */}
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">
+                Database Name
+              </label>
+              <input
+                type="text"
+                name="database_name"
+                value={formData.database_name}
+                onChange={handleInputChange}
+                placeholder="ContosoV210k"
+                className="w-full px-3 py-2 rounded-lg border border-border bg-muted/30 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+              />
+            </div>
+
+            {/* Credentials */}
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">
                   Username
@@ -278,123 +246,86 @@ export default function DatabaseWizard({ onSuccess = () => {}, onCancel = () => 
                   name="username"
                   value={formData.username}
                   onChange={handleInputChange}
-                  placeholder="username"
-                  className="w-full px-3 py-2 rounded border border-muted bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
+                  placeholder="admin@company"
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-muted/30 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  name="password"
+                  value={formData.password}
+                  onChange={handleInputChange}
+                  placeholder="••••••••"
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-muted/30 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary text-sm"
                 />
               </div>
             </div>
 
-            {/* Password */}
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
-                Password
-              </label>
-              <input
-                type="password"
-                name="password"
-                value={formData.password}
-                onChange={handleInputChange}
-                placeholder="••••••••"
-                className="w-full px-3 py-2 rounded border border-muted bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
-              />
+            {/* Info box */}
+            <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-xs text-foreground/70">
+              <p className="font-medium mb-1">🔒 Security</p>
+              <p>Your credentials will be encrypted and stored in Azure Key Vault, not in the database.</p>
             </div>
 
-            {/* Error Message */}
-            {error && (
-              <div className="p-3 rounded bg-destructive/10 border border-destructive/30 flex gap-2">
-                <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" strokeWidth={1.5} />
-                <p className="text-sm text-destructive">{error}</p>
-              </div>
-            )}
-
-            {/* Buttons */}
-            <div className="flex gap-3 justify-end pt-2">
+            {/* Actions */}
+            <div className="flex gap-3 pt-4">
               <button
                 onClick={onCancel}
-                className="px-4 py-2 rounded text-sm font-medium text-foreground 
-                  hover:bg-muted transition-colors"
+                className="flex-1 px-4 py-2 rounded-lg border border-border bg-muted/30 text-foreground hover:bg-muted/50 transition-colors font-medium text-sm"
               >
                 Cancel
               </button>
               <button
-                onClick={handleValidateAndCheck}
-                disabled={isLoading || !formData.name || !formData.host || !formData.database || !formData.username || !formData.password}
-                className="px-4 py-2 rounded text-sm font-medium bg-primary text-primary-foreground 
-                  hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed 
-                  flex items-center gap-2"
+                onClick={handleSaveDatabase}
+                disabled={isLoading}
+                className="flex-1 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isLoading ? (
-                  <>
-                    <Loader className="w-4 h-4 animate-spin" />
-                    Validating...
-                  </>
-                ) : (
-                  'Validate & Check'
-                )}
+                Add Database
               </button>
             </div>
           </motion.div>
         )}
 
-        {/* Step 3: Permissions */}
-        {step === 3 && permissions && (
+        {/* Step 2: Saving */}
+        {step === 2 && (
           <motion.div
-            key="step3"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="space-y-4"
+            key="step2"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="py-12 flex flex-col items-center justify-center"
           >
-            <PermissionValidator
-              permissions={permissions}
-              isLoading={isLoading}
-              onContinue={handleSaveToKeyVault}
-              onCancel={handleReset}
-            />
+            <Loader className="w-8 h-8 animate-spin text-primary mb-4" strokeWidth={1.5} />
+            <p className="text-foreground font-medium">Saving to Azure Key Vault...</p>
+            <p className="text-xs text-muted-foreground mt-1">This may take a few seconds</p>
           </motion.div>
         )}
 
-        {/* Step 4: Success */}
-        {step === 4 && savedConfig && (
+        {/* Step 3: Success */}
+        {step === 3 && (
           <motion.div
-            key="step4"
+            key="step3"
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bento-card p-6 text-center space-y-4"
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="py-12 flex flex-col items-center justify-center"
           >
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
-              transition={{ delay: 0.2, type: 'spring' }}
-              className="flex justify-center"
+              transition={{ delay: 0.2, type: 'spring', damping: 15 }}
+              className="w-12 h-12 rounded-full bg-success/20 flex items-center justify-center mb-4"
             >
-              <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center">
-                <Check className="w-8 h-8 text-success" strokeWidth={1.5} />
-              </div>
+              <Check className="w-6 h-6 text-success" strokeWidth={2.5} />
             </motion.div>
-            
-            <div>
-              <h3 className="text-lg font-semibold text-foreground">
-                ✓ Configuration Saved
-              </h3>
-              <p className="text-sm text-foreground/60 mt-1">
-                {savedConfig.message}
-              </p>
-            </div>
-
-            {savedConfig.stored_in_keyvault && (
-              <div className="bg-success/10 border border-success/30 rounded p-3 text-xs text-foreground/80">
-                Credentials securely stored in Azure Key Vault
-              </div>
-            )}
-
-            <button
-              onClick={handleReset}
-              className="px-4 py-2 rounded text-sm font-medium bg-primary text-primary-foreground 
-                hover:bg-primary/90 transition-colors"
-            >
-              Configure Another Database
-            </button>
+            <p className="text-foreground font-semibold">Database Added Successfully!</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Your database is now configured and ready to use.
+            </p>
           </motion.div>
         )}
       </AnimatePresence>
