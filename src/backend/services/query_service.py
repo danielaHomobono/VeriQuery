@@ -8,6 +8,7 @@ Separa la lógica de BD y LLM de los endpoints
 import logging
 from typing import Optional, Dict, List, Any
 from datetime import datetime
+import json
 
 from src.backend.schemas import QueryRequest, QueryResponse
 from src.backend.security.prompt_shields import PromptShield, ThreatLevel
@@ -29,21 +30,62 @@ class QueryService:
     - Manejar errores
     """
 
+    @staticmethod
+    def _format_schema_dict_to_string(schema_dict: Dict) -> str:
+        """
+        Convierte el schema dict de SchemaService a un string formateado
+        compatible con nl2sql_generator.
+        
+        Args:
+            schema_dict: Dict con estructura {"tables": [...]}
+            
+        Returns:
+            String formateado del schema
+        """
+        if isinstance(schema_dict, str):
+            return schema_dict  # Ya es string
+        
+        if not isinstance(schema_dict, dict):
+            return str(schema_dict)
+        
+        schema_text = "=== SCHEMA ===\n"
+        
+        tables = schema_dict.get("tables", [])
+        schema_text += f"Total tablas: {len(tables)}\n\n"
+        
+        for table in tables:
+            table_name = table.get("name", "unnamed")
+            schema_text += f"TABLA: {table_name}\n" + "-" * 40 + "\n"
+            
+            columns = table.get("columns", [])
+            for col in columns:
+                col_name = col.get("name", "unnamed")
+                col_type = col.get("type", "unknown")
+                col_nullable = "nullable" if col.get("nullable") else "not null"
+                schema_text += f"  {col_name}: {col_type} ({col_nullable})\n"
+            
+            schema_text += "\n"
+        
+        return schema_text if schema_text.strip() else "⚠️ Schema vacío"
+
     def __init__(
         self,
         prompt_shield: PromptShield,
         nl2sql_generator: NL2SQLGenerator,
-        db_connector
+        multi_db_connector,
+        schema_service=None
     ):
         """
         Args:
             prompt_shield: Instancia de validación de seguridad
             nl2sql_generator: Generador NL2SQL con QueryTracer
-            db_connector: Conector de base de datos
+            multi_db_connector: MultiDatabaseConnector para ejecutar queries en diferentes BDs
+            schema_service: (Opcional) Servicio de schemas para sincronizar caché
         """
         self.shield = prompt_shield
         self.nl2sql = nl2sql_generator
-        self.db = db_connector
+        self.multi_db = multi_db_connector
+        self.schema_service = schema_service
 
     def execute_query(self, request: QueryRequest) -> QueryResponse:
         """
@@ -80,7 +122,19 @@ class QueryService:
 
             # ── PASO 2: Cambiar BD activa si es necesario ──────────────────
             if request.database_name:
+                # Si tenemos SchemaService, pre-cargar schema desde caché sincronizado
+                if self.schema_service:
+                    cached_schema_dict = self.schema_service.get_cached_schema(request.database_name)
+                    if cached_schema_dict:
+                        # Convertir dict a string formateado
+                        schema_str = self._format_schema_dict_to_string(cached_schema_dict)
+                        # Sincronizar schema entre servicios
+                        self.nl2sql._schema_cache[request.database_name] = schema_str
+                        logger.info(f"✓ Schema sincronizado a nl2sql para: {request.database_name} ({len(schema_str)} chars)")
+                
+                # Ahora cambiar BD activa (encontrará schema en caché)
                 self.nl2sql.set_active_database_name(request.database_name)
+                logger.info(f"✓ BD activa cambiada a: {request.database_name}")
 
             # ── PASO 3: Generar SQL ───────────────────────────────────────
             sql_result = self.nl2sql.generate_sql(
@@ -155,19 +209,22 @@ class QueryService:
 
             # ── PASO 6: Ejecución en base de datos ────────────────────────
             db_exec_start = datetime.now()
-            db_result = self.db.execute_query(sql)
+            
+            # Usar MultiDatabaseConnector con el database_name especificado
+            db_results, db_error = self.multi_db.execute_query(
+                sql,
+                database_name=request.database_name or self.multi_db.active_database.name if self.multi_db.active_database else None
+            )
             db_exec_time = (datetime.now() - db_exec_start).total_seconds() * 1000
 
-            if not db_result.success:
-                logger.error(
-                    f"[{query_id}] Error BD: {db_result.error}"
-                )
+            if db_error:
+                logger.error(f"[{query_id}] Error BD: {db_error}")
                 return QueryResponse(
                     success=False,
                     answer=None,
                     sql=sql,
                     explanation=sql_result.get("explanation"),
-                    error=db_result.error,
+                    error=db_error,
                     data=[],
                     row_count=0,
                     confidence=0.0,
@@ -183,7 +240,7 @@ class QueryService:
             # ── PASO 7: Retornar resultado exitoso ─────────────────────────
             total_time = (datetime.now() - start_time).total_seconds() * 1000
             logger.info(
-                f"[{query_id}] ✅ Query exitosa: {db_result.row_count} rows en {db_exec_time:.0f}ms"
+                f"[{query_id}] ✅ Query exitosa: {len(db_results)} rows en {db_exec_time:.0f}ms"
             )
 
             return QueryResponse(
@@ -191,8 +248,8 @@ class QueryService:
                 answer=sql_result.get("explanation", "Query ejecutada correctamente"),
                 sql=sql,
                 explanation=sql_result.get("explanation"),
-                data=db_result.data or [],
-                row_count=db_result.row_count,
+                data=db_results or [],
+                row_count=len(db_results),
                 confidence=sql_result.get("confidence", 95.0),
                 error=None,
                 trace_steps=sql_result.get("trace_steps"),

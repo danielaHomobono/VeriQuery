@@ -48,10 +48,18 @@ async def scan_schema(request_body: SchemaScanRequest, request: Request):
     try:
         schema_service = request.app.state.schema_service
         
-        schema_data = schema_service.scan_schema(request_body.database_name)
+        # schema_service.scan_schema returns (schema, error)
+        schema_data, error = schema_service.scan_schema(request_body.database_name)
+        
+        if error:
+            return SchemaResponse(
+                schema_data={},
+                database_name=request_body.database_name,
+                error=error,
+            )
         
         if not schema_data:
-            raise HTTPException(status_code=400, detail="Failed to scan schema")
+            raise HTTPException(status_code=400, detail="Failed to scan schema - no data returned")
         
         return SchemaResponse(
             schema_data=schema_data,

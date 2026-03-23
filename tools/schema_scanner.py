@@ -121,13 +121,13 @@ class SchemaScanner:
                         nullable=nullable == "YES",
                     ))
 
-                # Get primary keys
+                # Get primary keys using information_schema (more portable)
                 cursor.execute(f"""
-                    SELECT a.attname
-                    FROM pg_index i
-                    JOIN pg_attribute a ON a.attrelid = i.indrelid
-                    AND a.attnum = ANY(i.indkey)
-                    WHERE i.indrelname = '{table_name}_pkey'
+                    SELECT column_name
+                    FROM information_schema.key_column_usage
+                    WHERE table_name = '{table_name}' 
+                    AND constraint_name LIKE '%pkey'
+                    AND table_schema = 'public'
                 """)
                 pk_names = [row[0] for row in cursor.fetchall()]
                 for col in columns:

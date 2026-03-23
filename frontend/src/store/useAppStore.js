@@ -118,14 +118,15 @@ export const useAppStore = create((set, get) => ({
 
   // Send query (with persistent session)
   sendQuery: async (text) => {
-    const { addMessage, setLoading, setQueryResult, addAuditEvent, sessionId } = get()
+    const { addMessage, setLoading, setQueryResult, addAuditEvent, sessionId, selectedDatabase } = get()
     addMessage({ role: 'user', text })
     setLoading(true)
     addAuditEvent({ type: 'query', text, status: 'processing' })
     try {
       const payload = { 
         question: text,
-        ...(sessionId && { session_id: sessionId })
+        ...(sessionId && { session_id: sessionId }),
+        ...(selectedDatabase && { database_name: selectedDatabase })
       }
       const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/query`, {
         method: 'POST',

@@ -104,31 +104,32 @@ async def lifespan(app: FastAPI):
         ambiguity_detector = AmbiguityDetector()
         logger.info("✅ AmbiguityDetector initialized")
         
-        # 7. Create QueryService (inyectar dependencias)
+        # 7. Create SchemaService FIRST (needed for QueryService)
+        app.state.schema_service = SchemaService(
+            multi_connector=multi_db_connector
+        )
+        logger.info("✅ SchemaService initialized")
+        
+        # 8. Create QueryService (inyectar MultiDatabaseConnector para soportar múltiples BDs)
         app.state.query_service = QueryService(
             prompt_shield=shield,
             nl2sql_generator=nl2sql_gen,
-            db_connector=db_connector
+            multi_db_connector=multi_db_connector,
+            schema_service=app.state.schema_service
         )
         logger.info("✅ QueryService initialized")
         
-        # 8. Create AmbiguityService
+        # 9. Create AmbiguityService
         app.state.ambiguity_service = AmbiguityService(
             ambiguity_detector=ambiguity_detector
         )
         logger.info("✅ AmbiguityService initialized")
         
-        # 9. Create DatabaseManagementService
+        # 10. Create DatabaseManagementService
         app.state.database_management_service = DatabaseManagementService(
             multi_connector=multi_db_connector
         )
         logger.info("✅ DatabaseManagementService initialized")
-        
-        # 10. Create SchemaService
-        app.state.schema_service = SchemaService(
-            multi_connector=multi_db_connector
-        )
-        logger.info("✅ SchemaService initialized")
         
         # 11. Create SessionService
         app.state.session_service = SessionService()
