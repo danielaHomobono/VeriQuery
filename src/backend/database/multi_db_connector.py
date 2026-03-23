@@ -97,9 +97,9 @@ class MultiDatabaseConnector:
         self,
         name: str,
         db_type: str,
-        database: str,
         host: Optional[str] = None,
         port: Optional[int] = None,
+        database: str = "",
         username: Optional[str] = None,
         password: Optional[str] = None,
         filepath: Optional[str] = None,
@@ -110,9 +110,9 @@ class MultiDatabaseConnector:
         Args:
             name: Configuration name
             db_type: Database type (postgresql, mysql, sqlserver, sqlite)
-            database: Database name
             host: Host address
             port: Port number
+            database: Database name
             username: Username
             password: Password
             filepath: File path (for SQLite)

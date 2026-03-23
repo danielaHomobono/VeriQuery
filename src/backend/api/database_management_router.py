@@ -57,7 +57,7 @@ class SelectDatabaseRequest(BaseModel):
 
 
 class DatabaseConfig(BaseModel):
-    name: str
+    db_name: str  # Frontend expects db_name, not name
     db_type: str
     host: Optional[str] = None
     port: Optional[int] = None
