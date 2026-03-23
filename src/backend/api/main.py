@@ -553,154 +553,32 @@ async def process_query(request: QueryRequest) -> QueryResponse:
         db_result = app_state.db_connector.execute_query(generated_sql)
         
         if not db_result.success:
-            # If table doesn't exist, try with alternative table names
-            if "Invalid object name" in db_result.error:
-                logger.info(f"[{query_id}] Table not found, attempting to fix table names")
-                try:
-                    import re
-                    from src.backend.table_mapping import TABLE_ALIASES
-                    
-                    # Keep retrying until all table names are fixed or we hit a different error
-                    max_retries = 10  # Prevent infinite loops
-                    retry_count = 0
-                    fixed_tables = set()  # Track which TABLE GROUPS we've already tried fixing
-                    failed_table_history = []  # Track actual failed table names to detect cycles
-                    
-                    while "Invalid object name" in db_result.error and retry_count < max_retries:
-                        retry_count += 1
-                        
-                        # Extract the FIRST (current) failed table from the error message
-                        error_match = re.search(r"Invalid object name '([^']+)'", db_result.error)
-                        if not error_match:
-                            break
-                            
-                        failed_table = error_match.group(1)
-                        failed_table_normalized = failed_table.lower()
-                        logger.info(f"[{query_id}] Retry {retry_count}: Failed table: {failed_table}")
-                        
-                        # Check for cycles: if we've seen this table in errors before, break
-                        if failed_table_normalized in failed_table_history:
-                            logger.warning(f"[{query_id}] Cycle detected: {failed_table} appeared in errors before. Giving up.")
-                            break
-                        failed_table_history.append(failed_table_normalized)
-                        
-                        # Normalize table name for lookup (case-insensitive)
-                        lookup_table = None
-                        for alias_key in TABLE_ALIASES.keys():
-                            if alias_key.lower() == failed_table_normalized:
-                                lookup_table = alias_key
-                                break
-                        
-                        # Try alternatives for this specific table
-                        if lookup_table and lookup_table not in fixed_tables:
-                            alternatives = TABLE_ALIASES[lookup_table]
-                            found_working_alt = False
-                            
-                            for alt_table in alternatives:
-                                # Skip if this is the same table name (case-insensitive)
-                                if alt_table.lower() == failed_table_normalized:
-                                    continue
-                                    
-                                # Use case-insensitive regex replacement
-                                test_sql = re.sub(rf'\b{failed_table}\b', alt_table, generated_sql, flags=re.IGNORECASE)
-                                logger.info(f"[{query_id}] Trying alternative: {failed_table} -> {alt_table}")
-                                db_result = app_state.db_connector.execute_query(test_sql)
-                                
-                                if db_result.success:
-                                    logger.info(f"[{query_id}] ✅ Success with {alt_table}")
-                                    generated_sql = test_sql
-                                    fixed_tables.add(lookup_table)
-                                    found_working_alt = True
-                                    break
-                                elif "Invalid object name" in db_result.error:
-                                    # Check if a DIFFERENT table now fails
-                                    new_error_match = re.search(r"Invalid object name '([^']+)'", db_result.error)
-                                    new_failed_table = new_error_match.group(1) if new_error_match else None
-                                    
-                                    if new_failed_table and new_failed_table.lower() != failed_table_normalized:
-                                        # We fixed the first table! A different one now fails. Update and continue outer loop.
-                                        logger.info(f"[{query_id}] ✅ Fixed {failed_table} -> {alt_table}, but now {new_failed_table} fails. Continuing...")
-                                        generated_sql = test_sql
-                                        fixed_tables.add(lookup_table)
-                                        found_working_alt = True
-                                        break
-                                    # Same table still failing, try next alternative
-                                    continue
-                                else:
-                                    # Different error, stop retrying this table
-                                    logger.warning(f"[{query_id}] Different error (not table issue): {db_result.error[:100]}")
-                                    found_working_alt = True  # Don't try more alternatives
-                                    break
-                            
-                            if not found_working_alt:
-                                # No alternative worked for this table
-                                logger.warning(f"[{query_id}] No working alternative found for {failed_table}")
-                                break
-                        else:
-                            # Table not in our mapping or already tried
-                            if lookup_table in fixed_tables:
-                                logger.warning(f"[{query_id}] Already tried fixing {failed_table}, giving up")
-                            else:
-                                logger.warning(f"[{query_id}] {failed_table} not in TABLE_ALIASES mapping")
-                            break
-                        
-                except Exception as fix_error:
-                    logger.warning(f"[{query_id}] Error trying to fix table names: {fix_error}")
-                    import traceback
-                    logger.warning(traceback.format_exc())
+            # DEPRECATED: Fallback logic removed in v2.0
+            # Reason: New multi-BD architecture loads real schema, no TABLE_ALIASES needed
+            # If query fails, it's a real database error that needs to be reported
+            logger.error(f"[{query_id}] Database query execution failed: {db_result.error}")
+            exec_time_ms = (datetime.now() - query_exec_time).total_seconds() * 1000
+            total_time_ms = _get_elapsed_ms(start_time)
             
-            # If table fixed but now has invalid column names, try adding brackets
-            if not db_result.success and "Invalid column name" in db_result.error:
-                logger.info(f"[{query_id}] Invalid column name, attempting to add brackets around column names")
-                try:
-                    import re
-                    
-                    # Extract the failed column name
-                    col_match = re.search(r"Invalid column name '([^']+)'", db_result.error)
-                    if col_match:
-                        failed_column = col_match.group(1)
-                        logger.info(f"[{query_id}] Failed column: {failed_column}")
-                        
-                        # Try wrapping it in brackets
-                        test_sql = re.sub(rf'\b{re.escape(failed_column)}\b', f'[{failed_column}]', generated_sql)
-                        if test_sql != generated_sql:
-                            logger.info(f"[{query_id}] Trying with brackets: [{failed_column}]")
-                            db_result = app_state.db_connector.execute_query(test_sql)
-                            if db_result.success:
-                                logger.info(f"[{query_id}] ✅ Query succeeded with bracketed column names")
-                                generated_sql = test_sql
-                            else:
-                                logger.warning(f"[{query_id}] Still failed after adding brackets: {db_result.error[:100]}")
-                
-                except Exception as col_fix_error:
-                    logger.warning(f"[{query_id}] Error trying to fix column names: {col_fix_error}")
-            
-            # If still failed, return simulated result for demo purposes
-            if not db_result.success and "Invalid object name" in db_result.error:
-                logger.warning(f"[{query_id}] Table not found in database, returning simulated result")
-                answer = "Demo result: The query was correctly generated. Execution returned: approximately 100 records found."
-                exec_time_ms = (datetime.now() - query_exec_time).total_seconds() * 1000
-                total_time_ms = _get_elapsed_ms(start_time)
-                
-                return QueryResponse(
-                    success=True,
-                    answer=answer,
-                    sql=generated_sql,
-                    explanation=sql_result.get("explanation", "Query executed (simulated)"),
-                    data=[{"result": "Demo mode - table not in database"}],
-                    row_count=1,
-                    confidence=80.0,
-                    metadata={
-                        "execution_time_ms": round(total_time_ms, 2),
-                        "db_execution_time_ms": round(exec_time_ms, 2),
-                        "threat_level": validation_result.threat_level.value,
-                        "user_id": request.user_id,
-                        "organization_id": request.organization_id,
-                        "timestamp": datetime.now().isoformat(),
-                        "query_id": query_id,
-                        "note": "Demo mode - table not found, returning simulated result"
-                    }
-                )
+            return QueryResponse(
+                success=False,
+                answer=None,
+                sql=generated_sql,
+                explanation=f"Query execution failed: {db_result.error}",
+                data=[],
+                row_count=0,
+                confidence=0.0,
+                metadata={
+                    "execution_time_ms": round(total_time_ms, 2),
+                    "db_execution_time_ms": round(exec_time_ms, 2),
+                    "error": db_result.error,
+                    "threat_level": validation_result.threat_level.value,
+                    "user_id": request.user_id,
+                    "organization_id": request.organization_id,
+                    "timestamp": datetime.now().isoformat(),
+                    "query_id": query_id
+                }
+            )
             
             logger.error(f"[{query_id}] Query execution failed: {db_result.error}")
             logger.error(f"[{query_id}] Error type: {db_result.error_type}")
