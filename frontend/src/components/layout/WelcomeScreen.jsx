@@ -21,9 +21,10 @@ export default function WelcomeScreen() {
   }
 
   const handleAddDatabase = async (config) => {
-    await useAppStore.getState().addDatabase(config)
+    // Backend already saved the database via DatabaseWizard
+    // Just close the modal and refresh the list
     setIsModalOpen(false)
-    fetchUserDatabases()
+    await fetchUserDatabases()
   }
 
   return (

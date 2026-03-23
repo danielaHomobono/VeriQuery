@@ -12,6 +12,7 @@ Responsabilidades SOLO:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import logging
 import sys
@@ -227,21 +228,27 @@ async def health_check():
 async def validation_exception_handler(request, exc):
     """Handle Pydantic validation errors."""
     logger.error(f"❌ Validation Error on {request.url}: {exc.errors()}", exc_info=True)
-    return {
-        "success": False,
-        "error": "Validation error",
-        "detail": f"Invalid request body: {exc.errors()}"
-    }
+    return JSONResponse(
+        status_code=422,
+        content={
+            "success": False,
+            "error": "Validation error",
+            "detail": f"Invalid request body: {exc.errors()}"
+        }
+    )
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request, exc):
     """Catch-all exception handler."""
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
-    return {
-        "success": False,
-        "error": "Internal server error",
-        "detail": str(exc)[:200]
-    }
+    return JSONResponse(
+        status_code=500,
+        content={
+            "success": False,
+            "error": "Internal server error",
+            "detail": str(exc)[:200]
+        }
+    )
 
 
 # ============================================================================
