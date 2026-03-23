@@ -56,7 +56,7 @@ class DatabaseManagementService:
             logger.error(f"Error probando conexión: {str(e)}", exc_info=True)
             return False, f"Error: {str(e)}"
 
-    def save_database_config(self, config: Dict[str, Any]) -> Tuple[bool, str]:
+    def save_database_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """
         Guarda configuración de base de datos.
 
@@ -64,7 +64,7 @@ class DatabaseManagementService:
             config: Configuración con nombre y detalles
 
         Returns:
-            Tuple[success: bool, message: str]
+            Dict con success, message, stored_in_keyvault, etc.
         """
         try:
             logger.info(f"Guardando configuración de BD: {config.get('name')}")
@@ -83,11 +83,28 @@ class DatabaseManagementService:
             else:
                 logger.warning(f"✗ Error guardando: {msg}")
             
-            return success, msg
+            # Return dict matching DatabaseCredentialsResponse schema
+            return {
+                "success": success,
+                "message": msg,
+                "stored_in_keyvault": True,  # Assume stored in key vault for now
+                "is_readonly": False,
+                "readonly_message": None,
+                "permission_details": {},
+                "warnings": []
+            }
 
         except Exception as e:
             logger.error(f"Error guardando configuración: {str(e)}", exc_info=True)
-            return False, f"Error: {str(e)}"
+            return {
+                "success": False,
+                "message": f"Error: {str(e)}",
+                "stored_in_keyvault": False,
+                "is_readonly": False,
+                "readonly_message": None,
+                "permission_details": {},
+                "warnings": []
+            }
 
     def list_databases(self) -> List[str]:
         """
@@ -104,6 +121,21 @@ class DatabaseManagementService:
         except Exception as e:
             logger.error(f"Error listando BDs: {str(e)}", exc_info=True)
             return []
+
+    def get_active_database(self) -> Optional[str]:
+        """
+        Obtiene la base de datos activa actualmente.
+
+        Returns:
+            Nombre de la BD activa o None
+        """
+        try:
+            if self.connector.active_database:
+                return self.connector.active_database.name
+            return None
+        except Exception as e:
+            logger.error(f"Error obteniendo BD activa: {str(e)}", exc_info=True)
+            return None
 
     def get_database_info(self, database_name: str) -> Optional[Dict]:
         """

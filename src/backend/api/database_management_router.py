@@ -129,17 +129,10 @@ async def save_database_config(request_body: DatabaseSaveRequest, request: Reque
     try:
         db_service = request.app.state.database_management_service
         
-        result = db_service.save_database_config(request_body)
+        # Service now returns complete dict matching DatabaseCredentialsResponse
+        result = db_service.save_database_config(request_body.dict())
         
-        return DatabaseCredentialsResponse(
-            success=result["success"],
-            message=result["message"],
-            stored_in_keyvault=result.get("stored_in_keyvault", False),
-            is_readonly=result.get("is_readonly"),
-            readonly_message=result.get("readonly_message"),
-            permission_details=result.get("permission_details"),
-            warnings=result.get("warnings")
-        )
+        return DatabaseCredentialsResponse(**result)
     except Exception as e:
         logger.error(f"❌ Error saving database config: {e}", exc_info=True)
         return DatabaseCredentialsResponse(
