@@ -12,13 +12,14 @@ export const API = {
   HEALTH: `${API_URL}/api/health`,
   
   // Database Management (@router.get("") and @router.post("/save"))
-  DATABASE_LIST: (userId) => `${API_URL}/api/databases?user_id=${userId}`,
-  DATABASE_TEST: (userId) => `${API_URL}/api/databases/test?user_id=${userId}`,
-  DATABASE_ADD: (userId) => `${API_URL}/api/databases/save?user_id=${userId}`,
+  // Note: Backend does NOT use user_id parameter for these endpoints
+  DATABASE_LIST: () => `${API_URL}/api/databases`,
+  DATABASE_TEST: () => `${API_URL}/api/databases/test`,
+  DATABASE_ADD: () => `${API_URL}/api/databases/save`,
   DATABASE_ACTIVATE: (dbName) => `${API_URL}/api/databases/${dbName}/activate`,
   DATABASE_DELETE: (dbName) => `${API_URL}/api/databases/${dbName}`,
   DATABASE_GET: (dbName) => `${API_URL}/api/databases/${dbName}`,
-  CREDENTIAL_LIST: `${API_URL}/api/databases/credentials/list`,
+  CREDENTIAL_LIST: () => `${API_URL}/api/databases/credentials/list`,
   CREDENTIAL_VERIFY: (dbName) => `${API_URL}/api/databases/credentials/${dbName}/verify`,
   
   // Schema (@router.post("/scan") and @router.get(""))

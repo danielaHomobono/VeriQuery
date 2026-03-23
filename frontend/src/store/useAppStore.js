@@ -43,7 +43,7 @@ export const useAppStore = create((set, get) => ({
   fetchUserDatabases: async () => {
     set({ loadingDatabases: true, databaseError: null })
     try {
-      const response = await fetch(API.DATABASE_LIST(TEST_USER))
+      const response = await fetch(API.DATABASE_LIST())
       if (!response.ok) throw new Error('Failed to fetch databases')
       const data = await response.json()
       set({ userDatabases: data.databases || [] })
@@ -60,7 +60,7 @@ export const useAppStore = create((set, get) => ({
   addDatabase: async (config) => {
     set({ loadingDatabases: true, databaseError: null })
     try {
-      const response = await fetch(API.DATABASE_ADD(TEST_USER), {
+      const response = await fetch(API.DATABASE_ADD(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config)

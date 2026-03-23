@@ -62,7 +62,7 @@ export default function DatabaseWizard({ onSuccess = () => {}, onCancel = () => 
     setStep(2)
 
     try {
-      const response = await fetch(API.DATABASE_ADD(TEST_USER), {
+      const response = await fetch(API.DATABASE_ADD(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
