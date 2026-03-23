@@ -45,6 +45,7 @@ load_dotenv()
 from security.prompt_shields import PromptShield, ThreatLevel
 from nl2sql_generator import NL2SQLGenerator
 from config.azure_ai import AzureAIConfig
+from schemas import QueryRequest, QueryResponse
 from database import (
     get_database_connector,
     validate_database_connection,
@@ -194,60 +195,8 @@ app.include_router(schema_router)
 app.include_router(ambiguity_router)
 
 # ============================================================================
-# REQUEST/RESPONSE MODELS
+# REQUEST/RESPONSE MODELS (Otros modelos no incluídos en schemas)
 # ============================================================================
-
-class QueryRequest(BaseModel):
-    """User natural language query request."""
-    question: str = Field(..., min_length=1, max_length=500)
-    user_id: Optional[str] = Field(default="demo_user", description="User identifier")
-    organization_id: Optional[int] = Field(default=1, description="Organization ID")
-    
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "question": "¿Cuántos clientes tenemos?",
-                "user_id": "user@example.com",
-                "organization_id": 1
-            }
-        }
-    }
-
-
-class QueryResultData(BaseModel):
-    """Single row from query result."""
-    pass  # Dynamic schema based on actual columns
-
-
-class QueryResponse(BaseModel):
-    """Response with query results and metadata."""
-    success: bool = Field(..., description="Whether query succeeded")
-    answer: str = Field(..., description="Natural language answer")
-    sql: Optional[str] = Field(default=None, description="Generated SQL query")
-    explanation: Optional[str] = Field(default=None, description="Explanation of the query")
-    data: List[Dict[str, Any]] = Field(default_factory=list, description="Query results")
-    row_count: int = Field(default=0, description="Number of rows returned")
-    confidence: Optional[float] = Field(default=None, ge=0, le=100)
-    error: Optional[str] = Field(default=None, description="Error message if failed")
-    metadata: Dict[str, Any] = Field(default_factory=dict)
-    
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "success": True,
-                "answer": "Tenemos 1,663 clientes registrados",
-                "sql": "SELECT COUNT(*) as total FROM Customer",
-                "data": [{"total": 1663}],
-                "row_count": 1,
-                "confidence": 95.0,
-                "metadata": {
-                    "execution_time_ms": 125.5,
-                    "threat_level": "safe"
-                }
-            }
-        }
-    }
-
 
 class HealthResponse(BaseModel):
     """Health check response."""
@@ -257,6 +206,7 @@ class HealthResponse(BaseModel):
     security: str = Field(...)
     ai: str = Field(...)
     message: Optional[str] = Field(default=None)
+
 
 
 class ExamplesResponse(BaseModel):
