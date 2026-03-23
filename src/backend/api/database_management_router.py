@@ -11,7 +11,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/databases", tags=["databases"])
+router = APIRouter(prefix="/databases", tags=["databases"])
 
 
 # Request/Response Models

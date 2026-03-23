@@ -15,7 +15,7 @@ from src.backend.services import QueryService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/query", tags=["query"])
+router = APIRouter(prefix="/query", tags=["query"])
 
 
 def get_query_service(request: Request) -> QueryService:

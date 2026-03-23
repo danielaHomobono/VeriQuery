@@ -12,10 +12,10 @@ export const API = {
   HEALTH: `${API_URL}/api/health`,
   
   // Database Management
-  DATABASE_LIST: (userId) => `${API_URL}/api/database/list?user_id=${userId}`,
-  DATABASE_TEST: `${API_URL}/api/database/test-connection`,
-  DATABASE_ADD: (userId) => `${API_URL}/api/database/add?user_id=${userId}`,
-  DATABASE_VERIFY: (dbName) => `${API_URL}/api/database/verify?db_name=${dbName}`,
+  DATABASE_LIST: (userId) => `${API_URL}/api/databases/list?user_id=${userId}`,
+  DATABASE_TEST: `${API_URL}/api/databases/test-connection`,
+  DATABASE_ADD: (userId) => `${API_URL}/api/databases/add?user_id=${userId}`,
+  DATABASE_VERIFY: (dbName) => `${API_URL}/api/databases/verify?db_name=${dbName}`,
   
   // Schema
   SCHEMA_SCAN: (dbName, sessionId) => 

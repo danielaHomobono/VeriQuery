@@ -11,7 +11,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/schema", tags=["schema"])
+router = APIRouter(prefix="/schema", tags=["schema"])
 
 
 # Request/Response Models
