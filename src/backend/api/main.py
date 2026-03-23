@@ -85,8 +85,12 @@ async def lifespan(app: FastAPI):
         
         # 4. Initialize Database connector
         db_connector = get_database_connector()
-        db_connector.connect()
-        logger.info("✅ Database connector initialized")
+        try:
+            db_connector.connect()
+            logger.info("✅ Database connector initialized")
+        except Exception as e:
+            logger.warning(f"⚠️  Database connection failed (non-fatal): {e}")
+            logger.info("ℹ️  API will run but database operations will fail until connection is restored")
         
         # 5. Initialize MultiDatabaseConnector
         multi_db_connector = MultiDatabaseConnector()
@@ -112,13 +116,13 @@ async def lifespan(app: FastAPI):
         
         # 9. Create DatabaseManagementService
         app.state.database_management_service = DatabaseManagementService(
-            multi_db_connector=multi_db_connector
+            multi_connector=multi_db_connector
         )
         logger.info("✅ DatabaseManagementService initialized")
         
         # 10. Create SchemaService
         app.state.schema_service = SchemaService(
-            multi_db_connector=multi_db_connector
+            multi_connector=multi_db_connector
         )
         logger.info("✅ SchemaService initialized")
         
