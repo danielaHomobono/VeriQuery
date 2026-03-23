@@ -53,6 +53,10 @@ class QueryService:
         tables = schema_dict.get("tables", [])
         schema_text += f"Total tablas: {len(tables)}\n\n"
         
+        if len(tables) == 0:
+            schema_text += "INFO: No se encontraron tablas en el schema\n"
+            return schema_text
+        
         for table in tables:
             table_name = table.get("name", "unnamed")
             schema_text += f"TABLA: {table_name}\n" + "-" * 40 + "\n"
@@ -66,7 +70,7 @@ class QueryService:
             
             schema_text += "\n"
         
-        return schema_text if schema_text.strip() else "⚠️ Schema vacío"
+        return schema_text
 
     def __init__(
         self,

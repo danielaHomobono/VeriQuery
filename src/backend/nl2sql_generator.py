@@ -311,6 +311,20 @@ class NL2SQLGenerator:
                 "trace_steps": trace_data
             }
 
+        # Avisar si el schema está vacío pero válido (no hay tablas)
+        if "Total tablas: 0" in schema_info:
+            logger.warning(
+                f"[{tracer.question}] ⚠️  Schema vacío para BD '{self._active_db_name}' "
+                "— no se encontraron tablas. LLM intentará generar SQL genérico."
+            )
+            tracer.step(
+                archivo="nl2sql_generator",
+                paso="schema_warning",
+                entrada=f"BD: {self._active_db_name}",
+                accion="Schema vacío detectado",
+                salida="Procederá con generación genérica de SQL"
+            )
+
         # ── PASO 4: Generar SQL ───────────────────────────────────────────
         crafter_result = self.query_crafter.generate_sql(
             user_question=enriched_query,
