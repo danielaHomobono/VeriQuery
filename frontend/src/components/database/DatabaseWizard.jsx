@@ -62,10 +62,22 @@ export default function DatabaseWizard({ onSuccess = () => {}, onCancel = () => 
     setStep(2)
 
     try {
+      // Map frontend form fields to backend API schema
+      const requestBody = {
+        name: formData.db_name,  // Map: db_name → name
+        db_type: formData.db_type,
+        host: formData.host || undefined,
+        port: formData.port ? parseInt(formData.port) : undefined,
+        database: formData.database_name,  // Map: database_name → database
+        username: formData.username || undefined,
+        password: formData.password || undefined,
+        filepath: undefined  // SQLite field
+      }
+
       const response = await fetch(API.DATABASE_ADD(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(requestBody)
       })
 
       if (!response.ok) {

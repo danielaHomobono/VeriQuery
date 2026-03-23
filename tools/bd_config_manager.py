@@ -122,10 +122,27 @@ class BDConfigManager:
             List of database configuration names
         """
         try:
-            data = json.loads(self.config_file.read_text())
-            return list(data.get("databases", {}).keys())
+            # Ensure config file exists first
+            self._ensure_config_file()
+            
+            # Read and parse JSON
+            content = self.config_file.read_text()
+            data = json.loads(content)
+            
+            # Extract database names
+            databases = list(data.get("databases", {}).keys())
+            print(f"✅ Listed {len(databases)} databases: {databases}")
+            return databases
+            
+        except json.JSONDecodeError as e:
+            print(f"❌ Error parsing databases.json: {e}")
+            print(f"   File path: {self.config_file}")
+            print(f"   File exists: {self.config_file.exists()}")
+            # Return empty list on parse error
+            return []
         except Exception as e:
-            print(f"Error listing databases: {e}")
+            print(f"❌ Error listing databases: {e}")
+            print(f"   File path: {self.config_file}")
             return []
 
     def delete_database(self, name: str) -> bool:
